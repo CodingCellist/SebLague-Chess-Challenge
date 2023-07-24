@@ -13,23 +13,24 @@ namespace ChessChallenge.API
 		readonly HashSet<ulong> repetitionHistory;
 		readonly PieceList[] allPieceLists;
 		readonly PieceList[] validPieceLists;
-		readonly Piece[] pieces;
 
 		Move[] cachedLegalMoves;
 		bool hasCachedMoves;
 		Move[] cachedLegalCaptureMoves;
 		bool hasCachedCaptureMoves;
+        readonly Move[] movesDest;
 
-		/// <summary>
-		/// Create a new board. Note: this should not be used in the challenge,
-		/// use the board provided in the Think method instead.
-		/// </summary>
-		public Board(Chess.Board board)
+        /// <summary>
+        /// Create a new board. Note: this should not be used in the challenge,
+        /// use the board provided in the Think method instead.
+        /// </summary>
+        public Board(Chess.Board board)
 		{
 			this.board = board;
 			moveGen = new APIMoveGen();
 			cachedLegalMoves = Array.Empty<Move>();
 			cachedLegalCaptureMoves = Array.Empty<Move>();
+			movesDest = new Move[APIMoveGen.MaxMoves];
 
 			// Init piece lists
 			List<PieceList> validPieceLists = new();
@@ -47,14 +48,6 @@ namespace ChessChallenge.API
 			// Init rep history
 			repetitionHistory = new HashSet<ulong>(board.RepetitionPositionHistory);
 			repetitionHistory.Remove(board.ZobristKey);
-
-			// Create piece array
-			pieces = new Piece[64];
-			for (int i = 0; i < 64; i++)
-			{
-				int p = board.Square[i];
-				pieces[i] = new Piece((PieceType)PieceHelper.PieceType(p), PieceHelper.IsWhite(p), new Square(i));
-			}
 		}
 
 		/// <summary>
@@ -127,11 +120,25 @@ namespace ChessChallenge.API
 
 			if (!hasCachedMoves)
 			{
-				cachedLegalMoves = moveGen.GenerateMoves(board, includeQuietMoves: true);
-				hasCachedMoves = true;
+                Span<Move> moveSpan = movesDest.AsSpan();
+                moveGen.GenerateMoves(ref moveSpan, board, includeQuietMoves: true);
+                cachedLegalMoves = moveSpan.ToArray();
+                hasCachedMoves = true;
 			}
 
 			return cachedLegalMoves;
+		}
+
+        /// <summary>
+        /// Fills the given move span with legal moves, and slices it to the correct length.
+        /// Can choose to get only capture moves with the optional 'capturesOnly' parameter.
+		/// This gives the same result as the GetLegalMoves function, but allows you to be more
+		/// efficient with memory by allocating moves on the stack rather than the heap.
+        /// </summary>
+        public void GetLegalMovesNonAlloc(ref Span<Move> moveList, bool capturesOnly = false)
+		{
+			bool includeQuietMoves = !capturesOnly;
+			moveGen.GenerateMoves(ref moveList, board, includeQuietMoves);
 		}
 
 
@@ -139,8 +146,10 @@ namespace ChessChallenge.API
 		{
 			if (!hasCachedCaptureMoves)
 			{
-				cachedLegalCaptureMoves = moveGen.GenerateMoves(board, includeQuietMoves: false);
-				hasCachedCaptureMoves = true;
+                Span<Move> moveSpan = movesDest.AsSpan();
+                moveGen.GenerateMoves(ref moveSpan, board, includeQuietMoves: false);
+                cachedLegalCaptureMoves = moveSpan.ToArray();
+                hasCachedCaptureMoves = true;
 			}
 			return cachedLegalCaptureMoves;
 		}
@@ -191,25 +200,27 @@ namespace ChessChallenge.API
 			return new Square(board.KingSquare[colIndex]);
 		}
 
-		/// <summary>
-		/// Gets the piece on the given square. If the square is empty, the piece will have a PieceType of None.
-		/// </summary>
-		public Piece GetPiece(Square square)
-		{
-			return pieces[square.Index];
-		}
+        /// <summary>
+        /// Gets the piece on the given square. If the square is empty, the piece will have a PieceType of None.
+        /// </summary>
+        public Piece GetPiece(Square square)
+        {
+            int p = board.Square[square.Index];
+            bool white = PieceHelper.IsWhite(p);
+            return new Piece((PieceType)PieceHelper.PieceType(p), white, square);
+        }
 
-		/// <summary>
-		/// Gets a list of pieces of the given type and colour
-		/// </summary>
-		public PieceList GetPieceList(PieceType pieceType, bool white)
+        /// <summary>
+        /// Gets a list of pieces of the given type and colour
+        /// </summary>
+        public PieceList GetPieceList(PieceType pieceType, bool white)
 		{
 			return allPieceLists[PieceHelper.MakePiece((int)pieceType, white)];
 		}
 		/// <summary>
 		/// Gets an array of all the piece lists. In order these are:
 		/// Pawns(white), Knights (white), Bishops (white), Rooks (white), Queens (white), King (white),
-		/// Pawns (white), Knights (black), Bishops (black), Rooks (black), Queens (black), King (black)
+		/// Pawns (black), Knights (black), Bishops (black), Rooks (black), Queens (black), King (black)
 		/// </summary>
 		public PieceList[] GetAllPieceLists()
 		{
@@ -271,5 +282,16 @@ namespace ChessChallenge.API
 		/// </summary>
 		public ulong ZobristKey => board.ZobristKey;
 
-	}
+        /// <summary>
+        /// Creates a board from the given fen string. Please note that this is quite slow, and so it is advised
+        /// to use the board given in the Think function, and update it using MakeMove and UndoMove instead.
+        /// </summary>
+        public static Board CreateBoardFromFEN(string fen)
+        {
+            Chess.Board boardCore = new Chess.Board();
+            boardCore.LoadPosition(fen);
+            return new Board(boardCore);
+        }
+
+    }
 }
