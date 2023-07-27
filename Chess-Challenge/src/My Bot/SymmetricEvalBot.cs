@@ -2,6 +2,8 @@
 using ChessChallenge.Application; //DELETE
 using System;
 
+namespace Bots;
+
 public class MyBot3 : IChessBot
 {
     public Move Think(Board board, Timer timer)
@@ -11,15 +13,15 @@ public class MyBot3 : IChessBot
         //FOR EVERY MOVE check the affect it would have on the board. (This obviously needs to be optimised).
         float best_eval = 0;
         Move best_move = moves[0];
-        foreach(Move m in moves)
+        foreach (Move m in moves)
         {
             board.MakeMove(m);
             float e = Eval(board);
             float abs_e = Math.Abs(e);
 
-            if(abs_e > best_eval)
+            if (abs_e > best_eval)
             {
-                best_eval = abs_e; 
+                best_eval = abs_e;
                 best_move = m;
             }
             //ConsoleHelper.Log(m.ToString() + " gives eval: " + e.ToString());
@@ -42,12 +44,12 @@ public class MyBot3 : IChessBot
         int Q = board.GetPieceList(PieceType.Queen, true).Count - board.GetPieceList(PieceType.Queen, false).Count;
 
         //Multiply the material differences by their respective weights.
-        float result = (9 * Q) + 
-            (5 * R) + 
-            (3 * (B + N)) + 
+        float result = (9 * Q) +
+            (5 * R) +
+            (3 * (B + N)) +
             (1 * P);
 
-        if(!board.IsWhiteToMove)
+        if (!board.IsWhiteToMove)
         {
             result *= -1; //Adjusting result for when playing the black pieces.
         }
