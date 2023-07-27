@@ -4,7 +4,7 @@ using System;
 
 namespace Bots;
 
-public class MyBot3 : IChessBot
+public class SymmetricEvalBot : IChessBot
 {
     public Move Think(Board board, Timer timer)
     {
